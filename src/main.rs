@@ -8,6 +8,7 @@ use std::time::Instant;
 extern crate imagepipe;
 extern crate rawloader;
 
+/// Converts raw image files produced by cameras into image files
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
@@ -16,8 +17,8 @@ struct Args {
     filename: std::path::PathBuf,
 
     /// Separate raw files out to different directory (unused)
-    #[clap(short, long)]
-    separate_mode: bool,
+    // #[clap(short, long)]
+    // separate_mode: bool,
 
     /// Output file or directory (must not exist yet)
     #[clap(short, long, parse(from_os_str))]
