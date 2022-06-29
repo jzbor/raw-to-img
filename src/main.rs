@@ -54,7 +54,7 @@ enum ParsableAction {
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
 enum EncodedType {
-    JPEG, PNG,
+    JPEG, PNG, TIFF,
 }
 
 enum FileKind {
@@ -64,6 +64,7 @@ enum FileKind {
 enum EncoderType {
     JPEGEncoder(u8),
     PNGEncoder(image::codecs::png::CompressionType, image::codecs::png::FilterType),
+    TIFFEncoder,
 }
 
 const RAW_EXTENSIONS: [&'static str; 1] = [
@@ -154,7 +155,8 @@ fn fmt_duration(duration: &time::Duration) -> String {
     return string;
 }
 
-fn jpeg_encoder(path: &path::Path, quality: u8) -> Result<image::codecs::jpeg::JpegEncoder<io::BufWriter<fs::File>>, String> {
+fn jpeg_encoder(path: &path::Path, quality: u8)
+        -> Result<image::codecs::jpeg::JpegEncoder<io::BufWriter<fs::File>>, String> {
     let output_file = match fs::File::create(path) {
         Ok(val) => val,
         Err(e) => return Err(e.to_string()),
@@ -173,6 +175,17 @@ fn png_encoder(path: &path::Path, compression: image::codecs::png::CompressionTy
     let bufwriter = io::BufWriter::new(output_file);
 
     return Ok(image::codecs::png::PngEncoder::new_with_quality(bufwriter, compression, filter));
+}
+
+fn tiff_encoder(path: &path::Path)
+        -> Result<image::codecs::tiff::TiffEncoder<io::BufWriter<fs::File>>, String> {
+    let output_file = match fs::File::create(path) {
+        Ok(val) => val,
+        Err(e) => return Err(e.to_string()),
+    };
+    let bufwriter = io::BufWriter::new(output_file);
+
+    return Ok(image::codecs::tiff::TiffEncoder::new(bufwriter));
 }
 
 fn decode_raw(path: &path::Path) -> Result<(imagepipe::SRGBImage, time::Duration), String> {
@@ -198,6 +211,14 @@ fn encode_img(decoded: imagepipe::SRGBImage, path: &path::Path, encoder_type: &E
             Err(e) => return Err(e),
         },
         EncoderType::PNGEncoder(compression, filter) => match png_encoder(path, *compression, *filter) {
+            Ok(encoder) => match encoder.write_image(&decoded.data, decoded.width as u32,
+                                                     decoded.height as u32, ColorType::Rgb8) {
+                Ok(()) => return Ok(start_encode.elapsed()),
+                Err(e) => return Err(e.to_string()),
+            },
+            Err(e) => return Err(e),
+        },
+        EncoderType::TIFFEncoder => match tiff_encoder(path) {
             Ok(encoder) => match encoder.write_image(&decoded.data, decoded.width as u32,
                                                      decoded.height as u32, ColorType::Rgb8) {
                 Ok(()) => return Ok(start_encode.elapsed()),
@@ -309,10 +330,12 @@ fn main() {
         EncodedType::JPEG => EncoderType::JPEGEncoder(90),
         EncodedType::PNG => EncoderType::PNGEncoder(image::codecs::png::CompressionType::Rle,
                                                    image::codecs::png::FilterType::NoFilter),
+        EncodedType::TIFF => EncoderType::TIFFEncoder,
     };
     let extension = match args.encode_type {
         EncodedType::JPEG => "jpg",
         EncodedType::PNG => "png",
+        EncodedType::TIFF => "tiff",
     };
 
 
