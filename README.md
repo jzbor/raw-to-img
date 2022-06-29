@@ -15,7 +15,7 @@ Pretty much the same goes for output formats as long as they are [supported by i
 
 
 # Building the binary
-You can (nightly) build release versions with the following command:
+You can build (nightly) release versions with the following command:
 ```sh
 cargo build --release
 ```
