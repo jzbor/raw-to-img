@@ -19,21 +19,26 @@ struct Args {
     #[clap(short, long)]
     separate_mode: bool,
 
-    /// Output file or directory (must not exist yet) (unused)
+    /// Output file or directory (must not exist yet)
     #[clap(short, long, parse(from_os_str))]
     output: std::path::PathBuf,
 
-    /// How to handle raw image files (unused)
+    /// How to handle raw image files
     #[clap(short, long, value_enum, value_parser, default_value_t = ParsableAction::Parse)]
     raws: ParsableAction,
 
-    /// How to handle parsed image files (unused)
+    /// How to handle parsed image files
     #[clap(short, long, value_enum, value_parser, default_value_t = UnparsableAction::Copy)]
     images: UnparsableAction,
 
-    /// How to handle files other than raw or parsed images (unused)
+    /// How to handle files other than raw or parsed images
     #[clap(short, long, value_enum, value_parser, default_value_t = UnparsableAction::Copy)]
     files: UnparsableAction,
+
+    /// Which type to encode the images to
+    #[clap(short, long, value_enum, value_parser, default_value_t = EncodedType::JPEG)]
+    encode_type: EncodedType,
+
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
@@ -46,20 +51,26 @@ enum ParsableAction {
     Copy, Move, Ignore, Parse,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
+enum EncodedType {
+    JPEG, PNG,
+}
+
 enum FileKind {
     Raw, Image, Other,
 }
 
-enum ExportFormat {
-    JPEG(u8),
+enum EncoderType {
+    JPEGEncoder(u8),
+    PNGEncoder(image::codecs::png::CompressionType, image::codecs::png::FilterType),
 }
 
 const RAW_EXTENSIONS: [&'static str; 1] = [
     "CR2",
 ];
 
-const IMG_EXTENSIONS: [&'static str; 2] = [
-    "jpg", "jpeg",
+const IMG_EXTENSIONS: [&'static str; 3] = [
+    "jpg", "jpeg", "png",
 ];
 
 
@@ -152,6 +163,17 @@ fn jpeg_encoder(path: &path::Path, quality: u8) -> Result<image::codecs::jpeg::J
     return Ok(image::codecs::jpeg::JpegEncoder::new_with_quality(bufwriter, quality));
 }
 
+fn png_encoder(path: &path::Path, compression: image::codecs::png::CompressionType, filter: image::codecs::png::FilterType)
+        -> Result<image::codecs::png::PngEncoder<io::BufWriter<fs::File>>, String> {
+    let output_file = match fs::File::create(path) {
+        Ok(val) => val,
+        Err(e) => return Err(e.to_string()),
+    };
+    let bufwriter = io::BufWriter::new(output_file);
+
+    return Ok(image::codecs::png::PngEncoder::new_with_quality(bufwriter, compression, filter));
+}
+
 fn decode_raw(path: &path::Path) -> Result<(imagepipe::SRGBImage, time::Duration), String> {
     let start_decode = Instant::now();
     let decoded = match imagepipe::simple_decode_8bit(path, 0, 0) {
@@ -162,27 +184,27 @@ fn decode_raw(path: &path::Path) -> Result<(imagepipe::SRGBImage, time::Duration
     return Ok((decoded, start_decode.elapsed()));
 }
 
-fn encode_img(decoded: imagepipe::SRGBImage, path: &path::Path, format: ExportFormat) -> Result<time::Duration, String> {
-    let encoder = match format {
-        ExportFormat::JPEG(quality) => match jpeg_encoder(path, quality) {
-            Ok(encoder) => encoder,
+fn encode_img(decoded: imagepipe::SRGBImage, path: &path::Path, encoder_type: &EncoderType) -> Result<time::Duration, String> {
+    let start_encode = Instant::now();
+
+    match encoder_type {
+        EncoderType::JPEGEncoder(quality) => match jpeg_encoder(path, *quality) {
+            Ok(encoder) => match encoder.write_image(&decoded.data, decoded.width as u32,
+                                                     decoded.height as u32, ColorType::Rgb8) {
+                Ok(()) => return Ok(start_encode.elapsed()),
+                Err(e) => return Err(e.to_string()),
+            },
+            Err(e) => return Err(e),
+        },
+        EncoderType::PNGEncoder(compression, filter) => match png_encoder(path, *compression, *filter) {
+            Ok(encoder) => match encoder.write_image(&decoded.data, decoded.width as u32,
+                                                     decoded.height as u32, ColorType::Rgb8) {
+                Ok(()) => return Ok(start_encode.elapsed()),
+                Err(e) => return Err(e.to_string()),
+            },
             Err(e) => return Err(e),
         },
     };
-
-    let start_encode = Instant::now();
-
-    match encoder.write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8) {
-        Ok(()) => return Ok(start_encode.elapsed()),
-        Err(e) => return Err(e.to_string()),
-    }
-}
-
-fn raw_to_img(raw_path: &path::Path, jpg_path: &path::Path, format: ExportFormat) -> Result<(time::Duration, time::Duration), String> {
-    let (decoded, decode_time) = decode_raw(raw_path)?;
-    let encode_time = encode_img(decoded, jpg_path, format)?;
-
-    return Ok((decode_time, encode_time));
 }
 
 fn switch_base(path: &path::Path, old_base: &path::Path, new_base: &path::Path) -> Result<path::PathBuf, String> {
@@ -210,7 +232,7 @@ fn file_kind(path: &path::Path) -> FileKind {
     };
 }
 
-fn recode(input_path: &path::Path, output_path: &path::Path, args: &Args) -> Option<(time::Duration, time::Duration)> {
+fn recode(input_path: &path::Path, output_path: &path::Path, args: &Args, encoder: &EncoderType) -> Option<(time::Duration, time::Duration)> {
     println!("Decoding {:?}", input_path);
     let (decoded, decode_time) = match decode_raw(input_path) {
         Ok((decoded, decode_time)) => (decoded, decode_time),
@@ -219,7 +241,7 @@ fn recode(input_path: &path::Path, output_path: &path::Path, args: &Args) -> Opt
     println!("Decoded {:?} in {}", input_path, fmt_duration(&decode_time));
 
     println!("Encoding {:?}", output_path);
-    let encode_time = match encode_img(decoded, output_path, ExportFormat::JPEG(90)) {
+    let encode_time = match encode_img(decoded, output_path, encoder) {
         Ok(encode_time) => encode_time,
         Err(e) => { println!("Unable to encode {:?}: {:?}", output_path, e); return None },
     };
@@ -282,6 +304,16 @@ fn main() {
     let mut move_time = time::Duration::new(0, 0);
     let mut move_counter = 0;
 
+    let encoder = match args.encode_type {
+        EncodedType::JPEG => EncoderType::JPEGEncoder(90),
+        EncodedType::PNG => EncoderType::PNGEncoder(image::codecs::png::CompressionType::Rle,
+                                                   image::codecs::png::FilterType::NoFilter),
+    };
+    let extension = match args.encode_type {
+        EncodedType::JPEG => "jpg",
+        EncodedType::PNG => "png",
+    };
+
 
     if args.filename.as_path().metadata().expect("unable to get file attributes").is_dir() {
         let files = recurse(&mut args.filename);
@@ -309,7 +341,7 @@ fn main() {
             }
 
             if metadata.is_file() {
-                let decode_pathbuf = output_pathbuf.with_extension("jpg");
+                let decode_pathbuf = output_pathbuf.with_extension(extension);
                 let output_path = match file_kind(file) {
                     FileKind::Raw => match args.raws {
                         ParsableAction::Parse => decode_pathbuf.as_path(),
@@ -328,7 +360,7 @@ fn main() {
                     FileKind::Raw => match args.raws {
                         ParsableAction::Ignore => ignored_counter += 1,
                         ParsableAction::Parse =>
-                            match recode(file.as_path(), output_path, &args) {
+                            match recode(file.as_path(), output_path, &args, &encoder) {
                                 Some((dtime, etime)) => {
                                     decode_time += dtime;
                                     decode_counter += 1;
@@ -347,7 +379,6 @@ fn main() {
                                 Some(mtime) => { move_time += mtime; move_counter += 1 },
                                 None => err_counter += 1,
                             },
-                        _ => panic!("not implemented yet"),
                     },
                     FileKind::Image => match args.images {
                         UnparsableAction::Ignore => ignored_counter += 1,
@@ -361,7 +392,6 @@ fn main() {
                                 Some(mtime) => { move_time += mtime; move_counter += 1 },
                                 None => err_counter += 1,
                             },
-                        _ => panic!("not implemented yet"),
                     },
                     FileKind::Other => match args.files {
                         UnparsableAction::Ignore => ignored_counter += 1,
@@ -375,7 +405,6 @@ fn main() {
                                 Some(mtime) => { move_time += mtime; move_counter += 1 },
                                 None => err_counter += 1,
                             },
-                        _ => panic!("not implemented yet"),
                     },
                 };
                 file_counter += 1;
@@ -393,12 +422,15 @@ fn main() {
         let jpg = raw.with_extension("jpg");
 
         raw_info_short(&raw);
-        println!("Recoding {:?}", raw);
-        match raw_to_img(&raw, &jpg, ExportFormat::JPEG(90)) {
-            Ok((dtime, etime)) => println!("Recoded {:?} - took {:?} + {:?} = {:?} ms", raw,
-                                         dtime.as_millis(), etime.as_millis(), (dtime + etime).as_millis()),
-            Err(e) => println!("Unable to convert {:?}: {:?}", raw, e),
-        }
+        match recode(&raw, &args.output, &args, &encoder) {
+            Some((dtime, etime)) => {
+                decode_time += dtime;
+                decode_counter += 1;
+                encode_time += etime;
+                encode_counter += 1;
+            },
+            None => err_counter += 1,
+        };
     }
 
     println!();
