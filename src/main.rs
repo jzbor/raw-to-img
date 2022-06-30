@@ -328,8 +328,8 @@ fn main() {
 
     let encoder = match args.encode_type {
         EncodedType::JPEG => EncoderType::JPEGEncoder(90),
-        EncodedType::PNG => EncoderType::PNGEncoder(image::codecs::png::CompressionType::Rle,
-                                                   image::codecs::png::FilterType::NoFilter),
+        EncodedType::PNG => EncoderType::PNGEncoder(image::codecs::png::CompressionType::Default,
+                                                   image::codecs::png::FilterType::Adaptive),
         EncodedType::TIFF => EncoderType::TIFFEncoder,
     };
     let extension = match args.encode_type {
