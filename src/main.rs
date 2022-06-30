@@ -72,7 +72,7 @@ const RAW_EXTENSIONS: [&'static str; 1] = [
 ];
 
 const IMG_EXTENSIONS: [&'static str; 3] = [
-    "jpg", "jpeg", "png",
+    "jpg", "jpeg", "png", "tiff",
 ];
 
 
