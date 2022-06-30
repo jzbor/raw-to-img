@@ -37,7 +37,7 @@ struct Args {
     files: UnparsableAction,
 
     /// Which type to encode the images to
-    #[clap(short, long, value_enum, value_parser, default_value_t = EncodedType::JPEG)]
+    #[clap(short, long, value_enum, value_parser, default_value_t = EncodedType::Jpeg)]
     encode_type: EncodedType,
 
 }
@@ -54,24 +54,25 @@ enum ParsableAction {
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
 enum EncodedType {
-    JPEG, PNG, TIFF,
+    Jpeg, Png, Tiff,
 }
 
 enum FileKind {
     Raw, Image, Other,
 }
 
+#[derive(Copy, Clone)]
 enum EncoderType {
-    JPEGEncoder(u8),
-    PNGEncoder(image::codecs::png::CompressionType, image::codecs::png::FilterType),
-    TIFFEncoder,
+    JpegEncoder(u8),
+    PngEncoder(image::codecs::png::CompressionType, image::codecs::png::FilterType),
+    TiffEncoder,
 }
 
 const RAW_EXTENSIONS: [&'static str; 1] = [
     "CR2",
 ];
 
-const IMG_EXTENSIONS: [&'static str; 3] = [
+const IMG_EXTENSIONS: [&'static str; 4] = [
     "jpg", "jpeg", "png", "tiff",
 ];
 
@@ -155,39 +156,6 @@ fn fmt_duration(duration: &time::Duration) -> String {
     return string;
 }
 
-fn jpeg_encoder(path: &path::Path, quality: u8)
-        -> Result<image::codecs::jpeg::JpegEncoder<io::BufWriter<fs::File>>, String> {
-    let output_file = match fs::File::create(path) {
-        Ok(val) => val,
-        Err(e) => return Err(e.to_string()),
-    };
-    let bufwriter = io::BufWriter::new(output_file);
-
-    return Ok(image::codecs::jpeg::JpegEncoder::new_with_quality(bufwriter, quality));
-}
-
-fn png_encoder(path: &path::Path, compression: image::codecs::png::CompressionType, filter: image::codecs::png::FilterType)
-        -> Result<image::codecs::png::PngEncoder<io::BufWriter<fs::File>>, String> {
-    let output_file = match fs::File::create(path) {
-        Ok(val) => val,
-        Err(e) => return Err(e.to_string()),
-    };
-    let bufwriter = io::BufWriter::new(output_file);
-
-    return Ok(image::codecs::png::PngEncoder::new_with_quality(bufwriter, compression, filter));
-}
-
-fn tiff_encoder(path: &path::Path)
-        -> Result<image::codecs::tiff::TiffEncoder<io::BufWriter<fs::File>>, String> {
-    let output_file = match fs::File::create(path) {
-        Ok(val) => val,
-        Err(e) => return Err(e.to_string()),
-    };
-    let bufwriter = io::BufWriter::new(output_file);
-
-    return Ok(image::codecs::tiff::TiffEncoder::new(bufwriter));
-}
-
 fn decode_raw(path: &path::Path) -> Result<(imagepipe::SRGBImage, time::Duration), String> {
     let start_decode = Instant::now();
     let decoded = match imagepipe::simple_decode_8bit(path, 0, 0) {
@@ -198,34 +166,30 @@ fn decode_raw(path: &path::Path) -> Result<(imagepipe::SRGBImage, time::Duration
     return Ok((decoded, start_decode.elapsed()));
 }
 
-fn encode_img(decoded: imagepipe::SRGBImage, path: &path::Path, encoder_type: &EncoderType) -> Result<time::Duration, String> {
+fn encode_img(decoded: imagepipe::SRGBImage, path: &path::Path, encoder_type: EncoderType) -> Result<time::Duration, String> {
     let start_encode = Instant::now();
 
-    match encoder_type {
-        EncoderType::JPEGEncoder(quality) => match jpeg_encoder(path, *quality) {
-            Ok(encoder) => match encoder.write_image(&decoded.data, decoded.width as u32,
-                                                     decoded.height as u32, ColorType::Rgb8) {
-                Ok(()) => return Ok(start_encode.elapsed()),
-                Err(e) => return Err(e.to_string()),
-            },
-            Err(e) => return Err(e),
-        },
-        EncoderType::PNGEncoder(compression, filter) => match png_encoder(path, *compression, *filter) {
-            Ok(encoder) => match encoder.write_image(&decoded.data, decoded.width as u32,
-                                                     decoded.height as u32, ColorType::Rgb8) {
-                Ok(()) => return Ok(start_encode.elapsed()),
-                Err(e) => return Err(e.to_string()),
-            },
-            Err(e) => return Err(e),
-        },
-        EncoderType::TIFFEncoder => match tiff_encoder(path) {
-            Ok(encoder) => match encoder.write_image(&decoded.data, decoded.width as u32,
-                                                     decoded.height as u32, ColorType::Rgb8) {
-                Ok(()) => return Ok(start_encode.elapsed()),
-                Err(e) => return Err(e.to_string()),
-            },
-            Err(e) => return Err(e),
-        },
+    let output_file = match fs::File::create(path) {
+        Ok(val) => val,
+        Err(e) => return Err(e.to_string()),
+    };
+    let bufwriter = io::BufWriter::new(output_file);
+
+    let encode_result = match encoder_type {
+        EncoderType::JpegEncoder(quality)
+            => image::codecs::jpeg::JpegEncoder::new_with_quality(bufwriter, quality)
+                .write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8),
+        EncoderType::PngEncoder(compression, filter)
+            => image::codecs::png::PngEncoder::new_with_quality(bufwriter, compression, filter)
+                .write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8),
+        EncoderType::TiffEncoder
+            => image::codecs::tiff::TiffEncoder::new(bufwriter)
+                .write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8),
+    };
+
+    return match encode_result {
+        Ok(()) => Ok(start_encode.elapsed()),
+        Err(e) => Err(e.to_string()),
     };
 }
 
@@ -254,7 +218,7 @@ fn file_kind(path: &path::Path) -> FileKind {
     };
 }
 
-fn recode(input_path: &path::Path, output_path: &path::Path, args: &Args, encoder: &EncoderType) -> Option<(time::Duration, time::Duration)> {
+fn recode(input_path: &path::Path, output_path: &path::Path, args: &Args, encoder: EncoderType) -> Option<(time::Duration, time::Duration)> {
     println!("Decoding {:?}", input_path);
     let (decoded, decode_time) = match decode_raw(input_path) {
         Ok((decoded, decode_time)) => (decoded, decode_time),
@@ -327,15 +291,15 @@ fn main() {
     let mut move_counter = 0;
 
     let encoder = match args.encode_type {
-        EncodedType::JPEG => EncoderType::JPEGEncoder(90),
-        EncodedType::PNG => EncoderType::PNGEncoder(image::codecs::png::CompressionType::Default,
+        EncodedType::Jpeg => EncoderType::JpegEncoder(90),
+        EncodedType::Png => EncoderType::PngEncoder(image::codecs::png::CompressionType::Default,
                                                    image::codecs::png::FilterType::Adaptive),
-        EncodedType::TIFF => EncoderType::TIFFEncoder,
+        EncodedType::Tiff => EncoderType::TiffEncoder,
     };
     let extension = match args.encode_type {
-        EncodedType::JPEG => "jpg",
-        EncodedType::PNG => "png",
-        EncodedType::TIFF => "tiff",
+        EncodedType::Jpeg => "jpg",
+        EncodedType::Png => "png",
+        EncodedType::Tiff => "tiff",
     };
 
 
@@ -384,7 +348,7 @@ fn main() {
                     FileKind::Raw => match args.raws {
                         ParsableAction::Ignore => ignored_counter += 1,
                         ParsableAction::Parse =>
-                            match recode(file.as_path(), output_path, &args, &encoder) {
+                            match recode(file.as_path(), output_path, &args, encoder) {
                                 Some((dtime, etime)) => {
                                     decode_time += dtime;
                                     decode_counter += 1;
@@ -446,7 +410,7 @@ fn main() {
         let jpg = raw.with_extension("jpg");
 
         raw_info_short(&raw);
-        match recode(&raw, &args.output, &args, &encoder) {
+        match recode(&raw, &args.output, &args, encoder) {
             Some((dtime, etime)) => {
                 decode_time += dtime;
                 decode_counter += 1;
