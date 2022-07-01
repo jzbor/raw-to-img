@@ -17,7 +17,9 @@ Pretty much the same goes for output formats as long as they are [supported by i
 
 
 # Building the binary
-You can build (nightly) release versions with the following command:
+
+To build the latest release checkout the `latest` tag and run cargo like so:
 ```sh
-cargo build --release
+git checkout latest && cargo build --release
 ```
+The binary will then be located in `target/release/`.
