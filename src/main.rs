@@ -1,4 +1,4 @@
-use std::{env, fs, path, io, time};
+use std::{fs, path, io, time};
 
 use image::ColorType;
 use image::ImageEncoder;
@@ -218,7 +218,7 @@ fn file_kind(path: &path::Path) -> FileKind {
     };
 }
 
-fn recode(input_path: &path::Path, output_path: &path::Path, args: &Args, encoder: EncoderType) -> Option<(time::Duration, time::Duration)> {
+fn recode(input_path: &path::Path, output_path: &path::Path, encoder: EncoderType) -> Option<(time::Duration, time::Duration)> {
     println!("Decoding {:?}", input_path);
     let (decoded, decode_time) = match decode_raw(input_path) {
         Ok((decoded, decode_time)) => (decoded, decode_time),
@@ -236,7 +236,7 @@ fn recode(input_path: &path::Path, output_path: &path::Path, args: &Args, encode
     return Some((decode_time, encode_time));
 }
 
-fn copy(input_path: &path::Path, output_path: &path::Path, args: &Args) -> Option<time::Duration> {
+fn copy(input_path: &path::Path, output_path: &path::Path) -> Option<time::Duration> {
     if input_path == output_path {
         return None;
     }
@@ -250,11 +250,11 @@ fn copy(input_path: &path::Path, output_path: &path::Path, args: &Args) -> Optio
     };
 
     let time = start_time.elapsed();
-    println!("Copied {:?} to {:?} in {}", input_path, output_path, fmt_duration(&time));
+    println!("Copied {} bytes from {:?} to {:?} in {}", bytes, input_path, output_path, fmt_duration(&time));
     return Some(time);
 }
 
-fn move_file(input_path: &path::Path, output_path: &path::Path, args: &Args) -> Option<time::Duration> {
+fn move_file(input_path: &path::Path, output_path: &path::Path) -> Option<time::Duration> {
     if input_path == output_path {
         return None;
     }
@@ -262,8 +262,8 @@ fn move_file(input_path: &path::Path, output_path: &path::Path, args: &Args) -> 
     let start_time = time::Instant::now();
 
     println!("Moving {:?} to {:?}", input_path, output_path);
-    let bytes = match fs::rename(input_path, output_path) {
-        Ok(bytes) => bytes,
+    match fs::rename(input_path, output_path) {
+        Ok(()) => (),
         Err(e) => { println!("Unable to move {:?}: {:?}", output_path, e); return None },
     };
 
@@ -274,7 +274,6 @@ fn move_file(input_path: &path::Path, output_path: &path::Path, args: &Args) -> 
 
 
 fn main() {
-    let current_dir = env::current_dir().unwrap();
     let mut args = Args::parse();
 
     let start_time = time::Instant::now();
@@ -348,7 +347,7 @@ fn main() {
                     FileKind::Raw => match args.raws {
                         ParsableAction::Ignore => ignored_counter += 1,
                         ParsableAction::Parse =>
-                            match recode(file.as_path(), output_path, &args, encoder) {
+                            match recode(file.as_path(), output_path, encoder) {
                                 Some((dtime, etime)) => {
                                     decode_time += dtime;
                                     decode_counter += 1;
@@ -358,12 +357,12 @@ fn main() {
                                 None => err_counter += 1,
                             },
                         ParsableAction::Copy =>
-                            match copy(file.as_path(), output_path, &args) {
+                            match copy(file.as_path(), output_path) {
                                 Some(ctime) => { copy_time += ctime; copy_counter += 1 },
                                 None => err_counter += 1,
                             },
                         ParsableAction::Move =>
-                            match move_file(file.as_path(), output_path, &args) {
+                            match move_file(file.as_path(), output_path) {
                                 Some(mtime) => { move_time += mtime; move_counter += 1 },
                                 None => err_counter += 1,
                             },
@@ -371,12 +370,12 @@ fn main() {
                     FileKind::Image => match args.images {
                         UnparsableAction::Ignore => ignored_counter += 1,
                         UnparsableAction::Copy =>
-                            match copy(file.as_path(), output_path, &args) {
+                            match copy(file.as_path(), output_path) {
                                 Some(ctime) => { copy_time += ctime; copy_counter += 1 },
                                 None => err_counter += 1,
                             },
                         UnparsableAction::Move =>
-                            match move_file(file.as_path(), output_path, &args) {
+                            match move_file(file.as_path(), output_path) {
                                 Some(mtime) => { move_time += mtime; move_counter += 1 },
                                 None => err_counter += 1,
                             },
@@ -384,12 +383,12 @@ fn main() {
                     FileKind::Other => match args.files {
                         UnparsableAction::Ignore => ignored_counter += 1,
                         UnparsableAction::Copy =>
-                            match copy(file.as_path(), output_path, &args) {
+                            match copy(file.as_path(), output_path) {
                                 Some(ctime) => { copy_time += ctime; copy_counter += 1 },
                                 None => err_counter += 1,
                             },
                         UnparsableAction::Move =>
-                            match move_file(file.as_path(), output_path, &args) {
+                            match move_file(file.as_path(), output_path) {
                                 Some(mtime) => { move_time += mtime; move_counter += 1 },
                                 None => err_counter += 1,
                             },
@@ -406,11 +405,8 @@ fn main() {
 
         }
     } else {
-        let raw = args.filename.as_path();
-        let jpg = raw.with_extension("jpg");
-
-        raw_info_short(&raw);
-        match recode(&raw, &args.output, &args, encoder) {
+        raw_info_short(&args.filename.as_path());
+        match recode(&args.filename.as_path(), &args.output, encoder) {
             Some((dtime, etime)) => {
                 decode_time += dtime;
                 decode_counter += 1;
