@@ -156,6 +156,17 @@ fn fmt_duration(duration: &time::Duration) -> String {
     return string;
 }
 
+fn fmt_bytes(bytes: u64) -> String {
+    if bytes < 1024 {
+        return String::from(format!("{} B", bytes));
+    } else if bytes < 1024 * 1024 {
+        return String::from(format!("{:.2} KiB", (bytes as f64) / 1024.0));
+    } else {
+        return String::from(format!("{:.2} MiB", (bytes as f64) / (1024.0 * 1024.0)));
+    }
+
+}
+
 fn decode_raw(path: &path::Path) -> Result<(imagepipe::SRGBImage, time::Duration), String> {
     let start_decode = Instant::now();
     let decoded = match imagepipe::simple_decode_8bit(path, 0, 0) {
@@ -250,7 +261,7 @@ fn copy(input_path: &path::Path, output_path: &path::Path) -> Option<time::Durat
     };
 
     let time = start_time.elapsed();
-    println!("Copied {} bytes from {:?} to {:?} in {}", bytes, input_path, output_path, fmt_duration(&time));
+    println!("Copied {} to {:?} in {}", fmt_bytes(bytes), output_path, fmt_duration(&time));
     return Some(time);
 }
 
