@@ -16,9 +16,13 @@ struct Args {
     #[clap(parse(from_os_str))]
     filename: std::path::PathBuf,
 
-    /// Separate raw files out to different directory (unused)
+    // /// Separate raw files out to different directory (unused)
     // #[clap(short, long)]
     // separate_mode: bool,
+
+    /// Rename files if they already exist in the output dir
+    #[clap(long)]
+    rename: bool,
 
     /// Output file or directory (must not exist yet)
     #[clap(short, long, parse(from_os_str))]
@@ -211,6 +215,38 @@ fn switch_base(path: &path::Path, old_base: &path::Path, new_base: &path::Path) 
     }
 }
 
+fn unused_path(orig_path: &path::Path) -> Result<path::PathBuf, String> {
+    let parent = orig_path.parent();
+    let parent = match orig_path.parent() {
+        Some(parent) => parent,
+        None => return Err(String::from("Unable to find unused path")),
+    };
+    let name = match orig_path.file_stem() {
+        Some(stem) => match stem.to_str() {
+            Some(string) => string,
+            None => return Err(String::from("Unable to find unused path")),
+        },
+        None => return Err(String::from("Unable to find unused path")),
+    };
+    let extension = match orig_path.extension() {
+        Some(extension) => match extension.to_str() {
+            Some(string) => string,
+            None => return Err(String::from("Unable to find unused path")),
+        },
+        None => "",
+    };
+
+    let extended_name = | i | format!("{}_{}.{}", name, i, extension);
+    let new_path = | i | parent.join(path::Path::new(&extended_name(i)));
+
+    let mut i = 1;
+    while new_path(i).exists() {
+        i += 1;
+    }
+
+    return Ok(new_path(i));
+}
+
 fn file_kind(path: &path::Path) -> FileKind {
     return match path.extension() {
         Some(extension) => match extension.to_str() {
@@ -283,7 +319,6 @@ fn move_file(input_path: &path::Path, output_path: &path::Path) -> Option<time::
     return Some(time);
 }
 
-
 fn main() {
     let mut args = Args::parse();
 
@@ -340,18 +375,31 @@ fn main() {
 
             if metadata.is_file() {
                 let decode_pathbuf = output_pathbuf.with_extension(extension);
-                let output_path = match file_kind(file) {
+                let mut output_path = match file_kind(file) {
                     FileKind::Raw => match args.raws {
                         ParsableAction::Parse => decode_pathbuf.as_path(),
                         _ => output_pathbuf.as_path(),
                     }
                     _ => output_pathbuf.as_path(),
                 };
+                let mut alternative = output_path.to_path_buf().clone();
 
                 if output_path.exists() {
-                    ignored_counter += 1;
-                    println!("{:?} already exists and will *not* be overwritten", output_path);
-                    continue;
+                    if args.rename {
+                        alternative = match unused_path(output_path) {
+                            Ok(path) => path,
+                            Err(e) => {
+                                ignored_counter += 1;
+                                println!("Could not find unused path for {:?} ({}), it will be ignored", output_path, e);
+                                continue;
+                            }
+                        };
+                        output_path = &alternative;
+                    } else {
+                        ignored_counter += 1;
+                        println!("{:?} already exists and will *not* be overwritten", output_path);
+                        continue;
+                    }
                 }
 
                 match file_kind(file) {
