@@ -485,45 +485,40 @@ fn main() {
         };
     }
 
-    println!();
-    println!("DONE");
     let total_time = start_time.elapsed();
-    let per_file = if file_counter > 0 {
-        total_time / file_counter
-    } else {
-        time::Duration::new(0, 0)
-    };
-    let avg_decode_time = if decode_counter > 0 {
-        decode_time / decode_counter
-    } else {
-        time::Duration::new(0, 0)
-    };
-    let avg_encode_time = if encode_counter > 0 {
-        encode_time / encode_counter
-    } else {
-        time::Duration::new(0, 0)
-    };
-    let avg_copy_time = if copy_counter > 0 {
-        copy_time / copy_counter
-    } else {
-        time::Duration::new(0, 0)
-    };
-    let avg_move_time = if move_counter > 0 {
-        move_time / move_counter
-    } else {
-        time::Duration::new(0, 0)
-    };
 
-    println!("Processed {:?} files in {} (avg {} per file)",
-                file_counter, fmt_duration(&total_time), fmt_duration(&per_file));
-    println!("Decoded {:?} raw image files in {} (avg {} per file)",
-                decode_counter, fmt_duration(&decode_time), fmt_duration(&avg_decode_time));
-    println!("Encoded {:?} image files in {} (avg {} per file)",
-                encode_counter, fmt_duration(&encode_time), fmt_duration(&avg_encode_time));
-    println!("Copied {:?} files in {} (avg {} per file)",
-                copy_counter, fmt_duration(&copy_time), fmt_duration(&avg_copy_time));
-    println!("Moved {:?} files in {} (avg {} per file)",
-                move_counter, fmt_duration(&move_time), fmt_duration(&avg_move_time));
-    println!("Ran into {:?} errors and ignored {:?} files", err_counter, ignored_counter);
+    if file_counter > 0 {
+        println!("");
+        println!("DONE");
+        println!("");
+
+        let per_file = total_time / file_counter;
+        println!("Processed {:?} files in {} (avg {} per file)",
+                    file_counter, fmt_duration(&total_time), fmt_duration(&per_file));
+
+        if decode_counter > 0 {
+            let avg_decode_time = decode_time / decode_counter;
+            println!("Decoded {:?} raw image files in {} (avg {} per file)",
+                        decode_counter, fmt_duration(&decode_time), fmt_duration(&avg_decode_time));
+        }
+        if encode_counter > 0 {
+            let avg_encode_time = encode_time / encode_counter;
+            println!("Encoded {:?} image files in {} (avg {} per file)",
+                        encode_counter, fmt_duration(&encode_time), fmt_duration(&avg_encode_time));
+        }
+        if copy_counter > 0 {
+            let avg_copy_time = copy_time / copy_counter;
+            println!("Copied {:?} files in {} (avg {} per file)",
+                        copy_counter, fmt_duration(&copy_time), fmt_duration(&avg_copy_time));
+        }
+        if move_counter > 0 {
+            let avg_move_time = move_time / move_counter;
+            println!("Moved {:?} files in {} (avg {} per file)",
+                        move_counter, fmt_duration(&move_time), fmt_duration(&avg_move_time));
+        }
+        println!("Ran into {:?} errors and ignored {:?} files", err_counter, ignored_counter);
+    } else {
+        println!("Found no files to process in {:?}", args.filename);
+    }
 
 }
