@@ -16,14 +16,6 @@ struct Args {
     #[clap(parse(from_os_str))]
     filename: std::path::PathBuf,
 
-    // /// Separate raw files out to different directory (unused)
-    // #[clap(short, long)]
-    // separate_mode: bool,
-
-    /// What to do if the output file already exists
-    #[clap(short, long, value_enum, value_parser, default_value_t = ExistingAction::Ignore)]
-    existing: ExistingAction,
-
     /// Output file or directory (must not exist yet)
     #[clap(short, long, parse(from_os_str))]
     output: std::path::PathBuf,
@@ -40,9 +32,17 @@ struct Args {
     #[clap(short, long, value_enum, value_parser, default_value_t = UnparsableAction::Copy)]
     files: UnparsableAction,
 
+    /// What to do if the output file already exists
+    #[clap(short, long, value_enum, value_parser, default_value_t = ExistingAction::Ignore)]
+    existing: ExistingAction,
+
     /// Which type to encode the images to
     #[clap(short('t'), long, value_enum, value_parser, default_value_t = EncodedType::Jpeg)]
     encode_type: EncodedType,
+
+    /// Quality setting for jpeg encoding
+    #[clap(long, default_value_t = 90)]
+    jpeg_quality: u8,
 
 }
 
@@ -342,7 +342,7 @@ fn main() {
     let mut move_counter = 0;
 
     let encoder = match args.encode_type {
-        EncodedType::Jpeg => EncoderType::JpegEncoder(90),
+        EncodedType::Jpeg => EncoderType::JpegEncoder(args.jpeg_quality),
         EncodedType::Png => EncoderType::PngEncoder(image::codecs::png::CompressionType::Default,
                                                    image::codecs::png::FilterType::Adaptive),
         EncodedType::Tiff => EncoderType::TiffEncoder,
