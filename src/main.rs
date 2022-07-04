@@ -20,9 +20,9 @@ struct Args {
     // #[clap(short, long)]
     // separate_mode: bool,
 
-    /// Rename files if they already exist in the output dir
-    #[clap(long)]
-    rename: bool,
+    /// What to do if the output file already exists
+    #[clap(short, long, value_enum, value_parser, default_value_t = ExistingAction::Ignore)]
+    existing: ExistingAction,
 
     /// Output file or directory (must not exist yet)
     #[clap(short, long, parse(from_os_str))]
@@ -41,7 +41,7 @@ struct Args {
     files: UnparsableAction,
 
     /// Which type to encode the images to
-    #[clap(short, long, value_enum, value_parser, default_value_t = EncodedType::Jpeg)]
+    #[clap(short('t'), long, value_enum, value_parser, default_value_t = EncodedType::Jpeg)]
     encode_type: EncodedType,
 
 }
@@ -55,6 +55,13 @@ enum UnparsableAction {
 enum ParsableAction {
     Copy, Move, Ignore, Parse,
 }
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
+enum ExistingAction {
+    Rename, Ignore,
+}
+
+
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
 enum EncodedType {
@@ -216,7 +223,6 @@ fn switch_base(path: &path::Path, old_base: &path::Path, new_base: &path::Path) 
 }
 
 fn unused_path(orig_path: &path::Path) -> Result<path::PathBuf, String> {
-    let parent = orig_path.parent();
     let parent = match orig_path.parent() {
         Some(parent) => parent,
         None => return Err(String::from("Unable to find unused path")),
@@ -385,20 +391,23 @@ fn main() {
                 let mut alternative = output_path.to_path_buf().clone();
 
                 if output_path.exists() {
-                    if args.rename {
-                        alternative = match unused_path(output_path) {
-                            Ok(path) => path,
-                            Err(e) => {
-                                ignored_counter += 1;
-                                println!("Could not find unused path for {:?} ({}), it will be ignored", output_path, e);
-                                continue;
-                            }
-                        };
-                        output_path = &alternative;
-                    } else {
-                        ignored_counter += 1;
-                        println!("{:?} already exists and will *not* be overwritten", output_path);
-                        continue;
+                    match args.existing {
+                        ExistingAction::Rename => {
+                            alternative = match unused_path(output_path) {
+                                Ok(path) => path,
+                                Err(e) => {
+                                    ignored_counter += 1;
+                                    println!("Could not find unused path for {:?} ({}), it will be ignored", output_path, e);
+                                    continue;
+                                }
+                            };
+                            output_path = &alternative;
+                        },
+                        ExistingAction::Ignore => {
+                            ignored_counter += 1;
+                            println!("{:?} already exists and will *not* be overwritten", output_path);
+                            continue;
+                        }
                     }
                 }
 
