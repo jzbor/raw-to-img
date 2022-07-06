@@ -83,8 +83,9 @@ const RAW_EXTENSIONS: [&'static str; 1] = [
     "CR2",
 ];
 
-const IMG_EXTENSIONS: [&'static str; 4] = [
+const IMG_EXTENSIONS: [&'static str; 8] = [
     "jpg", "jpeg", "png", "tiff",
+    "JPG", "JPEG", "PNG", "TIFF",
 ];
 
 
@@ -373,8 +374,9 @@ fn main() {
 
             if output_pathbuf.parent().is_some() && !output_pathbuf.parent().unwrap().exists() {
                 let parent = output_pathbuf.parent().unwrap();
-                if fs::create_dir(&parent).is_err() {
+                if fs::create_dir_all(&parent).is_err() {
                     println!("Unable to create dir {:?} as parent for {:?}", parent, output_pathbuf);
+                    err_counter += 1;
                     continue;
                 }
             }
@@ -413,7 +415,10 @@ fn main() {
 
                 match file_kind(file) {
                     FileKind::Raw => match args.raws {
-                        ParsableAction::Ignore => ignored_counter += 1,
+                        ParsableAction::Ignore => {
+                            println!("Ignoring {:?}", file);
+                            ignored_counter += 1;
+                        },
                         ParsableAction::Parse =>
                             match recode(file.as_path(), output_path, encoder) {
                                 Some((dtime, etime)) => {
@@ -436,7 +441,10 @@ fn main() {
                             },
                     },
                     FileKind::Image => match args.images {
-                        UnparsableAction::Ignore => ignored_counter += 1,
+                        UnparsableAction::Ignore => {
+                            println!("Ignoring {:?}", file);
+                            ignored_counter += 1;
+                        },
                         UnparsableAction::Copy =>
                             match copy(file.as_path(), output_path) {
                                 Some(ctime) => { copy_time += ctime; copy_counter += 1 },
@@ -449,7 +457,10 @@ fn main() {
                             },
                     },
                     FileKind::Other => match args.files {
-                        UnparsableAction::Ignore => ignored_counter += 1,
+                        UnparsableAction::Ignore => {
+                            println!("Ignoring {:?}", file);
+                            ignored_counter += 1;
+                        },
                         UnparsableAction::Copy =>
                             match copy(file.as_path(), output_path) {
                                 Some(ctime) => { copy_time += ctime; copy_counter += 1 },
