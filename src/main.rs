@@ -1,12 +1,21 @@
 use std::{fs, path, io, time};
+use threadpool::ThreadPool;
+use std::sync::mpsc::channel;
 
 use image::ColorType;
 use image::ImageEncoder;
 use clap::Parser;
 use std::time::Instant;
+use std::path::*;
 
 extern crate imagepipe;
 extern crate rawloader;
+
+use job::*;
+use statistics::*;
+
+mod job;
+mod statistics;
 
 /// Converts raw image files produced by cameras into image files
 #[derive(Parser)]
@@ -44,36 +53,40 @@ struct Args {
     #[clap(long, default_value_t = 90)]
     jpeg_quality: u8,
 
+    /// Number of jobs to run in parallel
+    #[clap(short, long, default_value_t = 1)]
+    jobs: usize,
+
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
-enum UnparsableAction {
+pub enum UnparsableAction {
     Copy, Move, Ignore,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
-enum ParsableAction {
+pub enum ParsableAction {
     Copy, Move, Ignore, Parse,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
-enum ExistingAction {
+pub enum ExistingAction {
     Rename, Ignore,
 }
 
 
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
-enum EncodedType {
+pub enum EncodedType {
     Jpeg, Png, Tiff,
 }
 
-enum FileKind {
+pub enum FileKind {
     Raw, Image, Other,
 }
 
 #[derive(Copy, Clone)]
-enum EncoderType {
+pub enum EncoderType {
     JpegEncoder(u8),
     PngEncoder(image::codecs::png::CompressionType, image::codecs::png::FilterType),
     TiffEncoder,
@@ -215,6 +228,35 @@ fn encode_img(decoded: imagepipe::SRGBImage, path: &path::Path, encoder_type: En
     };
 }
 
+fn output_path(input: &PathBuf, input_base: &PathBuf, output_base: &PathBuf, extension: &str,
+               on_raw: ParsableAction, on_existing: ExistingAction) -> Result<std::path::PathBuf, String> {
+    let output_with_base = switch_base(input.as_path(), input_base.as_path(), output_base.as_path())?;
+
+    let decode_pathbuf = output_with_base.with_extension(extension);
+    let mut output_with_extension = match file_kind(&input) {
+        FileKind::Raw => match on_raw {
+            ParsableAction::Parse => decode_pathbuf.as_path(),
+            _ => output_with_base.as_path(),
+        }
+        _ => output_with_base.as_path(),
+    };
+
+
+    let mut alternative = output_with_extension.to_path_buf().clone();
+    if output_with_extension.exists() {
+        match on_existing {
+            ExistingAction::Rename => {
+                alternative = unused_path(output_with_extension)
+                    .map_err(|e| format!("Could not find unused path for {:?} ({}), it will be ignored", output_with_extension, e))?;
+                output_with_extension = &alternative;
+            },
+            _ => (),
+        }
+    }
+
+    return Ok(output_with_extension.to_path_buf());
+}
+
 fn switch_base(path: &path::Path, old_base: &path::Path, new_base: &path::Path) -> Result<path::PathBuf, String> {
     match path.strip_prefix(old_base) {
         Ok(stripped) => return Ok(new_base.join(stripped)),
@@ -325,21 +367,81 @@ fn move_file(input_path: &path::Path, output_path: &path::Path) -> Option<time::
     return Some(time);
 }
 
-fn main() {
-    let mut args = Args::parse();
+fn process_files(files: &Vec<PathBuf>, input_base: &PathBuf, output_base: &PathBuf,
+                          extension: &str, encoder: EncoderType, args: &Args) -> Statistics {
+    println!("Running in single job mode");
 
-    let start_time = time::Instant::now();
-    let mut file_counter = 0;
-    let mut ignored_counter = 0;
-    let mut err_counter = 0;
-    let mut decode_time = time::Duration::new(0, 0);
-    let mut decode_counter = 0;
-    let mut encode_time = time::Duration::new(0, 0);
-    let mut encode_counter = 0;
-    let mut copy_time = time::Duration::new(0, 0);
-    let mut copy_counter = 0;
-    let mut move_time = time::Duration::new(0, 0);
-    let mut move_counter = 0;
+    let mut acc_stats = Statistics::default();
+    let mut last_job_time = Instant::now();
+    for file in files {
+        let output_file = output_path(file, &input_base, &output_base, extension, args.raws, args.existing).unwrap();
+        let job = Job::new(file, &output_file, args.raws, args.files, args.images, args.existing, encoder);
+        let name = job.name();
+
+        let stats = match job.run() {
+            Ok(stats) => stats,
+            Err(e) => {
+                println!("Error ({}): {}", name, e);
+                let mut stats = Statistics::default();
+                stats.errors.inc();
+                stats
+            },
+        };
+
+        let now = Instant::now();
+        acc_stats.total.record(now - last_job_time);
+        last_job_time = now;
+        acc_stats.extend(&stats);
+
+        println!("Finished job {} ({}/{})", name, acc_stats.total.count(), files.len());
+    }
+
+    return acc_stats;
+}
+
+fn process_files_parallel(files: &Vec<PathBuf>, input_base: &PathBuf, output_base: &PathBuf,
+                          extension: &str, encoder: EncoderType, args: &Args) -> Statistics {
+    println!("Starting new thread pool running {} in parallel", args.jobs);
+
+    let mut last_job_time = time::Instant::now();
+    let pool = ThreadPool::new(args.jobs);
+    let (tx, rx) = channel();
+
+    for file in files {
+        let output_file = output_path(file, &input_base, &output_base, extension, args.raws, args.existing).unwrap();
+        let job = Job::new(file, &output_file, args.raws, args.files, args.images, args.existing, encoder);
+
+        let next_tx = tx.clone();
+        pool.execute(move || {
+            let name = job.name();
+            let stats = job.run();
+            match stats {
+                Ok(stats) => next_tx.send((name, stats)).unwrap(),
+                Err(e) => {
+                    println!("Error ({}): {}", name, e);
+                    let mut stats = Statistics::default();
+                    stats.errors.inc();
+                    next_tx.send((name, stats)).unwrap();
+                },
+            }
+        });
+    }
+
+    // pool.join();
+    let mut acc_stats = Statistics::default();
+    rx.iter().take(files.len()).fold(&mut acc_stats, |acc, (name, stats)| {
+        let now = Instant::now();
+        acc.total.record(now - last_job_time);
+        last_job_time = now;
+        println!("Finished job {} ({}/{})", name, acc.total.count(), files.len());
+        acc.extend(&stats)
+    });
+    return acc_stats;
+}
+
+fn main() {
+    let args = Args::parse();
+    let mut statistics = Statistics::default();
 
     let encoder = match args.encode_type {
         EncodedType::Jpeg => EncoderType::JpegEncoder(args.jpeg_quality),
@@ -355,170 +457,34 @@ fn main() {
 
 
     if args.filename.as_path().metadata().expect("unable to get file attributes").is_dir() {
-        let files = recurse(&mut args.filename);
-        let input_base = args.filename.as_path();
-        let output_base = args.output.as_path();
+        let files = recurse(&mut args.filename.clone());
+        let input_base = args.filename.clone();
+        let output_base = args.output.clone();
 
-        for file in &files {
-            println!();
-            let output_pathbuf = match switch_base(file.as_path(), input_base, output_base) {
-                Ok(pathbuf) => pathbuf,
-                Err(e) => { println!("Unable to switch base for {:?}: {:?}", file, e); continue },
-            };
-
-            let metadata = match file.metadata() {
-                Ok(metadata) => metadata,
-                Err(e) => { println!("Unable to get file attributes for {:?}: {:?}", file, e); continue },
-            };
-
-            if output_pathbuf.parent().is_some() && !output_pathbuf.parent().unwrap().exists() {
-                let parent = output_pathbuf.parent().unwrap();
-                if fs::create_dir(&parent).is_err() {
-                    println!("Unable to create dir {:?} as parent for {:?}", parent, output_pathbuf);
-                    continue;
-                }
-            }
-
-            if metadata.is_file() {
-                let decode_pathbuf = output_pathbuf.with_extension(extension);
-                let mut output_path = match file_kind(file) {
-                    FileKind::Raw => match args.raws {
-                        ParsableAction::Parse => decode_pathbuf.as_path(),
-                        _ => output_pathbuf.as_path(),
-                    }
-                    _ => output_pathbuf.as_path(),
-                };
-                let mut alternative = output_path.to_path_buf().clone();
-
-                if output_path.exists() {
-                    match args.existing {
-                        ExistingAction::Rename => {
-                            alternative = match unused_path(output_path) {
-                                Ok(path) => path,
-                                Err(e) => {
-                                    ignored_counter += 1;
-                                    println!("Could not find unused path for {:?} ({}), it will be ignored", output_path, e);
-                                    continue;
-                                }
-                            };
-                            output_path = &alternative;
-                        },
-                        ExistingAction::Ignore => {
-                            ignored_counter += 1;
-                            println!("{:?} already exists and will *not* be overwritten", output_path);
-                            continue;
-                        }
-                    }
-                }
-
-                match file_kind(file) {
-                    FileKind::Raw => match args.raws {
-                        ParsableAction::Ignore => ignored_counter += 1,
-                        ParsableAction::Parse =>
-                            match recode(file.as_path(), output_path, encoder) {
-                                Some((dtime, etime)) => {
-                                    decode_time += dtime;
-                                    decode_counter += 1;
-                                    encode_time += etime;
-                                    encode_counter += 1;
-                                },
-                                None => err_counter += 1,
-                            },
-                        ParsableAction::Copy =>
-                            match copy(file.as_path(), output_path) {
-                                Some(ctime) => { copy_time += ctime; copy_counter += 1 },
-                                None => err_counter += 1,
-                            },
-                        ParsableAction::Move =>
-                            match move_file(file.as_path(), output_path) {
-                                Some(mtime) => { move_time += mtime; move_counter += 1 },
-                                None => err_counter += 1,
-                            },
-                    },
-                    FileKind::Image => match args.images {
-                        UnparsableAction::Ignore => ignored_counter += 1,
-                        UnparsableAction::Copy =>
-                            match copy(file.as_path(), output_path) {
-                                Some(ctime) => { copy_time += ctime; copy_counter += 1 },
-                                None => err_counter += 1,
-                            },
-                        UnparsableAction::Move =>
-                            match move_file(file.as_path(), output_path) {
-                                Some(mtime) => { move_time += mtime; move_counter += 1 },
-                                None => err_counter += 1,
-                            },
-                    },
-                    FileKind::Other => match args.files {
-                        UnparsableAction::Ignore => ignored_counter += 1,
-                        UnparsableAction::Copy =>
-                            match copy(file.as_path(), output_path) {
-                                Some(ctime) => { copy_time += ctime; copy_counter += 1 },
-                                None => err_counter += 1,
-                            },
-                        UnparsableAction::Move =>
-                            match move_file(file.as_path(), output_path) {
-                                Some(mtime) => { move_time += mtime; move_counter += 1 },
-                                None => err_counter += 1,
-                            },
-                    },
-                };
-                file_counter += 1;
-            } else if output_pathbuf.exists() {
-                println!("{:?} already exists and will therefore be ignored", output_pathbuf);
-            } else if metadata.is_dir() { // recurse() currently does not pick up directories
-                println!("Ignoring {:?}: directories will be created on demand", file);
-            } else {
-                println!("Ignoring {:?}", file);
-            }
-
+        if args.jobs > 1 {
+            statistics = process_files_parallel(&files, &input_base, &output_base, extension, encoder, &args);
+        } else {
+            statistics = process_files(&files, &input_base, &output_base, extension, encoder, &args);
         }
+
     } else {
         raw_info_short(&args.filename.as_path());
         match recode(&args.filename.as_path(), &args.output, encoder) {
             Some((dtime, etime)) => {
-                decode_time += dtime;
-                decode_counter += 1;
-                encode_time += etime;
-                encode_counter += 1;
+                statistics.decoded.record(dtime);
+                statistics.encoded.record(etime);
             },
-            None => err_counter += 1,
+            None => statistics.errors.inc(),
         };
     }
 
-    let total_time = start_time.elapsed();
-
-    if file_counter > 0 {
+    if statistics.total.count() > 0 {
         println!("");
         println!("DONE");
         println!("");
 
-        let per_file = total_time / file_counter;
-        println!("Processed {:?} files in {} (avg {} per file)",
-                    file_counter, fmt_duration(&total_time), fmt_duration(&per_file));
-
-        if decode_counter > 0 {
-            let avg_decode_time = decode_time / decode_counter;
-            println!("Decoded {:?} raw image files in {} (avg {} per file)",
-                        decode_counter, fmt_duration(&decode_time), fmt_duration(&avg_decode_time));
-        }
-        if encode_counter > 0 {
-            let avg_encode_time = encode_time / encode_counter;
-            println!("Encoded {:?} image files in {} (avg {} per file)",
-                        encode_counter, fmt_duration(&encode_time), fmt_duration(&avg_encode_time));
-        }
-        if copy_counter > 0 {
-            let avg_copy_time = copy_time / copy_counter;
-            println!("Copied {:?} files in {} (avg {} per file)",
-                        copy_counter, fmt_duration(&copy_time), fmt_duration(&avg_copy_time));
-        }
-        if move_counter > 0 {
-            let avg_move_time = move_time / move_counter;
-            println!("Moved {:?} files in {} (avg {} per file)",
-                        move_counter, fmt_duration(&move_time), fmt_duration(&avg_move_time));
-        }
-        println!("Ran into {:?} errors and ignored {:?} files", err_counter, ignored_counter);
+        statistics.print();
     } else {
         println!("Found no files to process in {:?}", args.filename);
     }
-
 }

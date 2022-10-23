@@ -687,6 +687,7 @@ dependencies = [
  "image",
  "imagepipe",
  "rawloader",
+ "threadpool",
 ]
 
 [[package]]
