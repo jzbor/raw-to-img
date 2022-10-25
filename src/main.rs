@@ -96,8 +96,9 @@ const RAW_EXTENSIONS: [&'static str; 1] = [
     "CR2",
 ];
 
-const IMG_EXTENSIONS: [&'static str; 4] = [
+const IMG_EXTENSIONS: [&'static str; 8] = [
     "jpg", "jpeg", "png", "tiff",
+    "JPG", "JPEG", "PNG", "TIFF",
 ];
 
 
