@@ -92,13 +92,12 @@ pub enum EncoderType {
     TiffEncoder,
 }
 
-const RAW_EXTENSIONS: [&'static str; 1] = [
-    "CR2",
+const RAW_EXTENSIONS: [&'static str; 2] = [
+    "cr2", "raw",
 ];
 
-const IMG_EXTENSIONS: [&'static str; 8] = [
+const IMG_EXTENSIONS: [&'static str; 4] = [
     "jpg", "jpeg", "png", "tiff",
-    "JPG", "JPEG", "PNG", "TIFF",
 ];
 
 
@@ -300,9 +299,9 @@ fn file_kind(path: &path::Path) -> FileKind {
     return match path.extension() {
         Some(extension) => match extension.to_str() {
             Some(ext) => {
-                if RAW_EXTENSIONS.iter().any(|e| *e == ext) {
+                if RAW_EXTENSIONS.iter().any(|e| e.to_lowercase() == ext.to_lowercase()) {
                     FileKind::Raw
-                } else if IMG_EXTENSIONS.iter().any(|e| *e == ext) {
+                } else if IMG_EXTENSIONS.iter().any(|e| e.to_lowercase() == ext.to_lowercase()) {
                     FileKind::Image
                 } else {
                     FileKind::Other
