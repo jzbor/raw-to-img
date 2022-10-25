@@ -401,7 +401,7 @@ fn process_files(files: &Vec<PathBuf>, input_base: &PathBuf, output_base: &PathB
 
 fn process_files_parallel(files: &Vec<PathBuf>, input_base: &PathBuf, output_base: &PathBuf,
                           extension: &str, encoder: EncoderType, args: &Args) -> Statistics {
-    println!("Starting new thread pool running {} in parallel", args.jobs);
+    println!("Starting new thread pool running {} jobs in parallel", args.jobs);
 
     let mut last_job_time = time::Instant::now();
     let pool = ThreadPool::new(args.jobs);
