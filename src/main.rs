@@ -92,8 +92,8 @@ pub enum EncoderType {
     TiffEncoder,
 }
 
-const RAW_EXTENSIONS: [&'static str; 2] = [
-    "cr2", "raw",
+const RAW_EXTENSIONS: [&'static str; 3] = [
+    "arw", "cr2", "raw",
 ];
 
 const IMG_EXTENSIONS: [&'static str; 4] = [

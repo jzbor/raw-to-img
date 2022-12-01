@@ -8,7 +8,9 @@ Just open an issue so I can add them to the whitelist.
 Pretty much the same goes for output formats as long as they are [supported by image-rs](https://docs.rs/image/latest/image/codecs/index.html).
 
 ### Supported raw formats:
+* ARW
 * CR2
+* RAW
 
 ### Supported image formats:
 * jpeg
