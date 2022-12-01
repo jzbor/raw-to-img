@@ -46,16 +46,16 @@ struct Args {
     existing: ExistingAction,
 
     /// Which type to encode the images to
-    #[clap(short('t'), long, value_enum, value_parser, default_value_t = EncodedType::Jpeg)]
+    #[clap(short('n'), long, value_enum, value_parser, default_value_t = EncodedType::Jpeg)]
     encode_type: EncodedType,
 
     /// Quality setting for jpeg encoding
     #[clap(long, default_value_t = 90)]
     jpeg_quality: u8,
 
-    /// Number of jobs to run in parallel
+    /// Number of threads to run in parallel
     #[clap(short, long, default_value_t = 1)]
-    jobs: usize,
+    threads: usize,
 
 }
 
@@ -401,10 +401,10 @@ fn process_files(files: &Vec<PathBuf>, input_base: &PathBuf, output_base: &PathB
 
 fn process_files_parallel(files: &Vec<PathBuf>, input_base: &PathBuf, output_base: &PathBuf,
                           extension: &str, encoder: EncoderType, args: &Args) -> Statistics {
-    println!("Starting new thread pool running {} jobs in parallel", args.jobs);
+    println!("Starting new thread pool running {} threads in parallel", args.threads);
 
     let mut last_job_time = time::Instant::now();
-    let pool = ThreadPool::new(args.jobs);
+    let pool = ThreadPool::new(args.threads);
     let (tx, rx) = channel();
 
     for file in files {
@@ -461,7 +461,7 @@ fn main() {
         let input_base = args.filename.clone();
         let output_base = args.output.clone();
 
-        if args.jobs > 1 {
+        if args.threads > 1 {
             statistics = process_files_parallel(&files, &input_base, &output_base, extension, encoder, &args);
         } else {
             statistics = process_files(&files, &input_base, &output_base, extension, encoder, &args);
@@ -483,7 +483,7 @@ fn main() {
         println!("DONE");
         println!("");
 
-        statistics.print();
+        statistics.print_nthreads(args.threads.try_into().unwrap());
     } else {
         println!("Found no files to process in {:?}", args.filename);
     }

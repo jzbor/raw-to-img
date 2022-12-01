@@ -47,6 +47,11 @@ impl StatisticsItem {
             fmt_duration(&self.time_total()), fmt_duration(&self.time_avg()));
     }
 
+    pub fn print_nthreads(&self, nthreads: u32) {
+        println!("{} files in approx. {} (avg {} per file)", self.count(),
+            fmt_duration(&(self.time_total() / nthreads)), fmt_duration(&self.time_avg()));
+    }
+
     pub fn extend(&mut self, other: &StatisticsItem) {
         self.count += other.count;
         self.times.extend(&other.times);
@@ -77,6 +82,23 @@ impl Statistics {
         self.errors.print();
     }
 
+    pub fn print_nthreads(&self, nthreads: u32) {
+        print!("Total ");
+        self.total.print();
+        print!("Decoded ");
+        self.decoded.print_nthreads(nthreads);
+        print!("Encoded ");
+        self.encoded.print_nthreads(nthreads);
+        print!("Copied ");
+        self.copied.print_nthreads(nthreads);
+        print!("Moved ");
+        self.moved.print_nthreads(nthreads);
+        print!("Ignored ");
+        self.ignored.print_nthreads(nthreads);
+        print!("Encountered errors on ");
+        self.errors.print_nthreads(nthreads);
+    }
+
     pub fn extend(&mut self, other: &Statistics) -> &mut Statistics {
         self.total.extend(&other.total);
         self.decoded.extend(&other.decoded);
@@ -84,7 +106,7 @@ impl Statistics {
         self.copied.extend(&other.copied);
         self.moved.extend(&other.moved);
         self.errors.extend(&other.errors);
-        self.ignored.extend(&other.errors);
+        self.ignored.extend(&other.ignored);
 
         return self;
     }
