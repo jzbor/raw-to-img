@@ -233,7 +233,7 @@ fn output_path(input: &PathBuf, input_base: &PathBuf, output_base: &PathBuf, ext
     let output_with_base = switch_base(input.as_path(), input_base.as_path(), output_base.as_path())?;
 
     let decode_pathbuf = output_with_base.with_extension(extension);
-    let mut output_with_extension = match file_kind(&input) {
+    let output_with_extension = match file_kind(&input) {
         FileKind::Raw => match on_raw {
             ParsableAction::Parse => decode_pathbuf.as_path(),
             _ => output_with_base.as_path(),
@@ -242,19 +242,12 @@ fn output_path(input: &PathBuf, input_base: &PathBuf, output_base: &PathBuf, ext
     };
 
 
-    let mut alternative = output_with_extension.to_path_buf().clone();
-    if output_with_extension.exists() {
-        match on_existing {
-            ExistingAction::Rename => {
-                alternative = unused_path(output_with_extension)
-                    .map_err(|e| format!("Could not find unused path for {:?} ({}), it will be ignored", output_with_extension, e))?;
-                output_with_extension = &alternative;
-            },
-            _ => (),
-        }
+    if output_with_extension.exists() && on_existing == ExistingAction::Rename {
+        return unused_path(output_with_extension)
+            .map_err(|e| format!("Could not find unused path for {:?} ({}), it will be ignored", output_with_extension, e));
+    } else {
+        return Ok(output_with_extension.to_path_buf());
     }
-
-    return Ok(output_with_extension.to_path_buf());
 }
 
 fn switch_base(path: &path::Path, old_base: &path::Path, new_base: &path::Path) -> Result<path::PathBuf, String> {
