@@ -4,6 +4,11 @@ version = "0.3.0"
 edition = "2021"
 authors = [ "jzbor" ]
 readme = "README.md"
+description = "Converts raw image files produced by cameras into regular image files. Also works recursively on whole file trees instead of just a single folder or image."
+repository = "https://github.com/jzbor/raw-to-img"
+license-file = "LICENSE"
+exclude = [ "test-data/" ]
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
