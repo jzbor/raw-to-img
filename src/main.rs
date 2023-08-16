@@ -22,15 +22,16 @@ mod statistics;
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// File or directory to parse
-    #[clap(parse(from_os_str))]
+    #[clap()]
     filename: std::path::PathBuf,
 
     /// Output file or directory (must not exist yet)
-    #[clap(short, long, parse(from_os_str))]
+    #[clap(short, long)]
     output: std::path::PathBuf,
 
     /// How to handle raw image files
     #[clap(short, long, value_enum, value_parser, default_value_t = ParsableAction::Parse)]
+    #[arg(value_enum)]
     raws: ParsableAction,
 
     /// How to handle parsed image files
@@ -59,24 +60,22 @@ struct Args {
 
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
 pub enum UnparsableAction {
     Copy, Move, Ignore,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
 pub enum ParsableAction {
     Copy, Move, Ignore, Parse,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
 pub enum ExistingAction {
     Rename, Ignore,
 }
 
-
-
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ArgEnum)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
 pub enum EncodedType {
     Jpeg, Png, Tiff,
 }
