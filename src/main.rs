@@ -92,11 +92,11 @@ pub enum EncoderType {
     TiffEncoder,
 }
 
-const RAW_EXTENSIONS: [&'static str; 3] = [
+const RAW_EXTENSIONS: [&str; 3] = [
     "arw", "cr2", "raw",
 ];
 
-const IMG_EXTENSIONS: [&'static str; 4] = [
+const IMG_EXTENSIONS: [&str; 4] = [
     "jpg", "jpeg", "png", "tiff",
 ];
 
@@ -114,7 +114,7 @@ fn recurse(dirname: &mut path::PathBuf) -> Vec<path::PathBuf> {
             file_list.append(&mut subfiles);
         }
     }
-    return file_list;
+    file_list
 }
 
 fn raw_info_short(raw_path: &path::Path) {
@@ -146,16 +146,16 @@ fn fmt_duration(duration: &time::Duration) -> String {
     }
     string.push_str(format!("{}ms", millis).as_str());
 
-    return string;
+    string
 }
 
 fn fmt_bytes(bytes: u64) -> String {
     if bytes < 1024 {
-        return String::from(format!("{} B", bytes));
+        format!("{} B", bytes)
     } else if bytes < 1024 * 1024 {
-        return String::from(format!("{:.2} KiB", (bytes as f64) / 1024.0));
+        return format!("{:.2} KiB", (bytes as f64) / 1024.0);
     } else {
-        return String::from(format!("{:.2} MiB", (bytes as f64) / (1024.0 * 1024.0)));
+        return format!("{:.2} MiB", (bytes as f64) / (1024.0 * 1024.0));
     }
 
 }
@@ -167,7 +167,7 @@ fn decode_raw(path: &path::Path) -> Result<(imagepipe::SRGBImage, time::Duration
         Err(e) => return Err(e),
     };
 
-    return Ok((decoded, start_decode.elapsed()));
+    Ok((decoded, start_decode.elapsed()))
 }
 
 fn encode_img(decoded: imagepipe::SRGBImage, path: &path::Path, encoder_type: EncoderType) -> Result<time::Duration, String> {
@@ -191,18 +191,18 @@ fn encode_img(decoded: imagepipe::SRGBImage, path: &path::Path, encoder_type: En
                 .write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8),
     };
 
-    return match encode_result {
+    match encode_result {
         Ok(()) => Ok(start_encode.elapsed()),
         Err(e) => Err(e.to_string()),
-    };
+    }
 }
 
-fn output_path(input: &PathBuf, input_base: &PathBuf, output_base: &PathBuf, extension: &str,
+fn output_path(input: &Path, input_base: &Path, output_base: &Path, extension: &str,
                on_raw: ParsableAction, on_existing: ExistingAction) -> Result<std::path::PathBuf, String> {
-    let output_with_base = switch_base(input.as_path(), input_base.as_path(), output_base.as_path())?;
+    let output_with_base = switch_base(input, input_base, output_base)?;
 
     let decode_pathbuf = output_with_base.with_extension(extension);
-    let output_with_extension = match file_kind(&input) {
+    let output_with_extension = match file_kind(input) {
         FileKind::Raw => match on_raw {
             ParsableAction::Parse => decode_pathbuf.as_path(),
             _ => output_with_base.as_path(),
@@ -212,17 +212,17 @@ fn output_path(input: &PathBuf, input_base: &PathBuf, output_base: &PathBuf, ext
 
 
     if output_with_extension.exists() && on_existing == ExistingAction::Rename {
-        return unused_path(output_with_extension)
-            .map_err(|e| format!("Could not find unused path for {:?} ({}), it will be ignored", output_with_extension, e));
+        unused_path(output_with_extension)
+            .map_err(|e| format!("Could not find unused path for {:?} ({}), it will be ignored", output_with_extension, e))
     } else {
-        return Ok(output_with_extension.to_path_buf());
+        Ok(output_with_extension.to_path_buf())
     }
 }
 
 fn switch_base(path: &path::Path, old_base: &path::Path, new_base: &path::Path) -> Result<path::PathBuf, String> {
     match path.strip_prefix(old_base) {
-        Ok(stripped) => return Ok(new_base.join(stripped)),
-        Err(_e) => return Err(String::from("unable to switch base")),
+        Ok(stripped) => Ok(new_base.join(stripped)),
+        Err(_e) => Err(String::from("unable to switch base")),
     }
 }
 
@@ -254,7 +254,7 @@ fn unused_path(orig_path: &path::Path) -> Result<path::PathBuf, String> {
         i += 1;
     }
 
-    return Ok(new_path(i));
+    Ok(new_path(i))
 }
 
 fn file_kind(path: &path::Path) -> FileKind {
@@ -290,7 +290,7 @@ fn recode(input_path: &path::Path, output_path: &path::Path, encoder: EncoderTyp
     };
     println!("Encoded {:?} in {}", output_path, fmt_duration(&encode_time));
 
-    return Some((decode_time, encode_time));
+    Some((decode_time, encode_time))
 }
 
 fn copy(input_path: &path::Path, output_path: &path::Path) -> Option<time::Duration> {
@@ -308,7 +308,7 @@ fn copy(input_path: &path::Path, output_path: &path::Path) -> Option<time::Durat
 
     let time = start_time.elapsed();
     println!("Copied {} to {:?} in {}", fmt_bytes(bytes), output_path, fmt_duration(&time));
-    return Some(time);
+    Some(time)
 }
 
 fn move_file(input_path: &path::Path, output_path: &path::Path) -> Option<time::Duration> {
@@ -326,17 +326,17 @@ fn move_file(input_path: &path::Path, output_path: &path::Path) -> Option<time::
 
     let time = start_time.elapsed();
     println!("Moved {:?} to {:?} in {}", input_path, output_path, fmt_duration(&time));
-    return Some(time);
+    Some(time)
 }
 
-fn process_files(files: &Vec<PathBuf>, input_base: &PathBuf, output_base: &PathBuf,
+fn process_files(files: &Vec<PathBuf>, input_base: &Path, output_base: &Path,
                           extension: &str, encoder: EncoderType, args: &Args) -> Statistics {
     println!("Running in single job mode");
 
     let mut acc_stats = Statistics::default();
     let mut last_job_time = Instant::now();
     for file in files {
-        let output_file = output_path(file, &input_base, &output_base, extension, args.raws, args.existing).unwrap();
+        let output_file = output_path(file, input_base, output_base, extension, args.raws, args.existing).unwrap();
         let job = Job::new(file, &output_file, args.raws, args.files, args.images, args.existing, encoder);
         let name = job.name();
 
@@ -358,10 +358,10 @@ fn process_files(files: &Vec<PathBuf>, input_base: &PathBuf, output_base: &PathB
         println!("Finished job {} ({}/{})", name, acc_stats.total.count(), files.len());
     }
 
-    return acc_stats;
+    acc_stats
 }
 
-fn process_files_parallel(files: &Vec<PathBuf>, input_base: &PathBuf, output_base: &PathBuf,
+fn process_files_parallel(files: &Vec<PathBuf>, input_base: &Path, output_base: &Path,
                           extension: &str, encoder: EncoderType, args: &Args) -> Statistics {
     println!("Starting new thread pool running {} threads in parallel", args.threads);
 
@@ -370,7 +370,7 @@ fn process_files_parallel(files: &Vec<PathBuf>, input_base: &PathBuf, output_bas
     let (tx, rx) = channel();
 
     for file in files {
-        let output_file = output_path(file, &input_base, &output_base, extension, args.raws, args.existing).unwrap();
+        let output_file = output_path(file, input_base, output_base, extension, args.raws, args.existing).unwrap();
         let job = Job::new(file, &output_file, args.raws, args.files, args.images, args.existing, encoder);
 
         let next_tx = tx.clone();
@@ -398,7 +398,7 @@ fn process_files_parallel(files: &Vec<PathBuf>, input_base: &PathBuf, output_bas
         println!("Finished job {} ({}/{})", name, acc.total.count(), files.len());
         acc.extend(&stats)
     });
-    return acc_stats;
+    acc_stats
 }
 
 fn main() {
@@ -430,8 +430,8 @@ fn main() {
         }
 
     } else {
-        raw_info_short(&args.filename.as_path());
-        match recode(&args.filename.as_path(), &args.output, encoder) {
+        raw_info_short(args.filename.as_path());
+        match recode(args.filename.as_path(), &args.output, encoder) {
             Some((dtime, etime)) => {
                 statistics.decoded.record(dtime);
                 statistics.encoded.record(etime);
@@ -441,9 +441,9 @@ fn main() {
     }
 
     if statistics.total.count() > 0 {
-        println!("");
+        println!();
         println!("DONE");
-        println!("");
+        println!();
 
         statistics.print_nthreads(args.threads.try_into().unwrap());
     } else {

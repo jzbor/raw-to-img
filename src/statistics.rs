@@ -1,5 +1,7 @@
 use crate::*;
 
+
+#[derive(Default)]
 pub struct StatisticsItem {
     count: u32,
     times: Vec<time::Duration>,
@@ -15,6 +17,7 @@ pub struct Statistics {
     pub errors: StatisticsItem,
     pub total: StatisticsItem,
 }
+
 
 impl StatisticsItem {
     pub fn record(&mut self, time: time::Duration) {
@@ -35,10 +38,10 @@ impl StatisticsItem {
     }
 
     pub fn time_avg(&self) -> time::Duration {
-        if self.times.len() > 0 {
+        if !self.times.is_empty() {
             return self.times.iter().sum::<time::Duration>() / (self.times.len() as u32);
         } else {
-            return time::Duration::default();
+            time::Duration::default()
         }
     }
 
@@ -55,12 +58,6 @@ impl StatisticsItem {
     pub fn extend(&mut self, other: &StatisticsItem) {
         self.count += other.count;
         self.times.extend(&other.times);
-    }
-}
-
-impl Default for StatisticsItem {
-    fn default() -> StatisticsItem {
-        StatisticsItem { count: 0, times: Vec::new() }
     }
 }
 
@@ -91,6 +88,6 @@ impl Statistics {
         self.errors.extend(&other.errors);
         self.ignored.extend(&other.ignored);
 
-        return self;
+        self
     }
 }

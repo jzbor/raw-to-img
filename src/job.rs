@@ -1,8 +1,8 @@
 use crate::*;
 
 pub struct Job {
-    input_file: std::path::PathBuf,
-    output_file: std::path::PathBuf,
+    input_file: PathBuf,
+    output_file: PathBuf,
     on_raw: ParsableAction,
     on_file: UnparsableAction,
     on_image: UnparsableAction,
@@ -13,7 +13,7 @@ pub struct Job {
 
 
 impl Job {
-    pub fn new(input_file: &std::path::PathBuf, output_file: &std::path::PathBuf, on_raw: ParsableAction,
+    pub fn new(input_file: &Path, output_file: &Path, on_raw: ParsableAction,
            on_file: UnparsableAction, on_image: UnparsableAction, on_existing: ExistingAction,
            encoder: EncoderType) -> Job {
         Job {
@@ -35,7 +35,7 @@ impl Job {
 
         // create parent directory if necessary
         if self.output_file.parent().is_some() && !self.output_file.parent().unwrap().exists() {
-            fs::create_dir_all(&(self.output_file.parent()).unwrap()).map_err(|s| s.to_string())?;
+            fs::create_dir_all((self.output_file.parent()).unwrap()).map_err(|s| s.to_string())?;
         }
 
         if metadata.is_file() {
@@ -105,7 +105,7 @@ impl Job {
             self.statistics.ignored.inc();
         }
 
-        return Ok(self.statistics);
+        Ok(self.statistics)
     }
 }
 
