@@ -117,37 +117,6 @@ fn recurse(dirname: &mut path::PathBuf) -> Vec<path::PathBuf> {
     return file_list;
 }
 
-fn print_files(files: &Vec<path::PathBuf>) {
-    for file in files {
-        println!("{:?}", file);
-    }
-
-}
-
-fn raw_info(raw_path: &path::Path) {
-    let from_time = Instant::now();
-    let image = match rawloader::decode_file(raw_path) {
-        Ok(val) => val,
-        Err(e) => panic!("{:?}", e),
-    };
-    let duration = from_time.elapsed();
-
-    println!();
-    println!("-------------------------------------------------------");
-    println!("Decoded in {} ms", duration.as_millis());
-    println!("Found camera \"{}\" model \"{}\"", image.make, image.model);
-    println!("Found clean named camera \"{}\" model \"{}\"", image.clean_make, image.clean_model);
-    println!("Image size is {}x{}", image.width, image.height);
-    println!("WB coeffs are {:?}", image.wb_coeffs);
-    println!("black levels are {:?}", image.blacklevels);
-    println!("white levels are {:?}", image.whitelevels);
-    println!("xyz_to_cam is {:?}", image.xyz_to_cam);
-    println!("CFA is {:?}", image.cfa);
-    println!("crops are {:?}", image.crops);
-    println!("-------------------------------------------------------");
-    println!();
-}
-
 fn raw_info_short(raw_path: &path::Path) {
     let from_time = Instant::now();
     let image = match rawloader::decode_file(raw_path) {

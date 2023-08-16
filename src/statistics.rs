@@ -65,23 +65,6 @@ impl Default for StatisticsItem {
 }
 
 impl Statistics {
-    pub fn print(&self) {
-        print!("Total ");
-        self.total.print();
-        print!("Decoded ");
-        self.decoded.print();
-        print!("Encoded ");
-        self.encoded.print();
-        print!("Copied ");
-        self.copied.print();
-        print!("Moved ");
-        self.moved.print();
-        print!("Ignored ");
-        self.ignored.print();
-        print!("Encountered errors on ");
-        self.errors.print();
-    }
-
     pub fn print_nthreads(&self, nthreads: u32) {
         print!("Total ");
         self.total.print();
