@@ -429,9 +429,12 @@ fn main() {
         }
 
     } else {
+        let starting = Instant::now();
         raw_info_short(args.filename.as_path());
         match recode(args.filename.as_path(), &args.output, encoder) {
             Some((dtime, etime)) => {
+                let ending = Instant::now();
+                statistics.total.record(ending - starting);
                 statistics.decoded.record(dtime);
                 statistics.encoded.record(etime);
             },
@@ -439,7 +442,7 @@ fn main() {
         };
     }
 
-    if statistics.total.count() > 0 {
+    if statistics.total.count() > 0 || statistics.errors.count() > 0 {
         println!();
         println!("DONE");
         println!();
