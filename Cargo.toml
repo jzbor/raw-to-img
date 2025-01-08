@@ -15,6 +15,6 @@ exclude = [ "test-data/" ]
 [dependencies]
 imagepipe = "0.5.0"
 rawloader = "0.37.1"
-image = "0.24.2"
+image = { version = "0.25.5", features = ["jpeg", "png", "tiff", "rayon"], default-features = false }
 clap = { version = "4.3.21", features = ["derive"] }
 threadpool = "1.8.1"

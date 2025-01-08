@@ -181,13 +181,13 @@ fn encode_img(decoded: imagepipe::SRGBImage, path: &path::Path, encoder_type: En
     let encode_result = match encoder_type {
         EncoderType::JpegEncoder(quality)
             => image::codecs::jpeg::JpegEncoder::new_with_quality(bufwriter, quality)
-                .write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8),
+                .write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8.into()),
         EncoderType::PngEncoder(compression, filter)
             => image::codecs::png::PngEncoder::new_with_quality(bufwriter, compression, filter)
-                .write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8),
+                .write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8.into()),
         EncoderType::TiffEncoder
             => image::codecs::tiff::TiffEncoder::new(bufwriter)
-                .write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8),
+                .write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8.into()),
     };
 
     match encode_result {
