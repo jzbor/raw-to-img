@@ -468,6 +468,7 @@ dependencies = [
  "byteorder-lite",
  "num-traits",
  "png",
+ "qoi",
  "ravif",
  "rayon",
  "tiff",

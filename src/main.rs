@@ -77,7 +77,7 @@ pub enum ExistingAction {
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, clap::ValueEnum)]
 pub enum EncodedType {
-    Jpeg, Png, Tiff,
+    Jpeg, Png, Tiff, Qoi
 }
 
 pub enum FileKind {
@@ -89,6 +89,7 @@ pub enum EncoderType {
     JpegEncoder(u8),
     PngEncoder(image::codecs::png::CompressionType, image::codecs::png::FilterType),
     TiffEncoder,
+    QoiEncoder
 }
 
 const RAW_EXTENSIONS: [&str; 3] = [
@@ -188,6 +189,10 @@ fn encode_img(decoded: imagepipe::SRGBImage, path: &path::Path, encoder_type: En
         EncoderType::TiffEncoder
             => image::codecs::tiff::TiffEncoder::new(bufwriter)
                 .write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8.into()),
+        EncoderType::QoiEncoder
+            => image::codecs::qoi::QoiEncoder::new(bufwriter)
+                .write_image(&decoded.data, decoded.width as u32, decoded.height as u32, ColorType::Rgb8.into()),
+
     };
 
     match encode_result {
@@ -409,11 +414,13 @@ fn main() {
         EncodedType::Png => EncoderType::PngEncoder(image::codecs::png::CompressionType::Default,
                                                    image::codecs::png::FilterType::Adaptive),
         EncodedType::Tiff => EncoderType::TiffEncoder,
+        EncodedType::Qoi => EncoderType::QoiEncoder,
     };
     let extension = match args.encode_type {
         EncodedType::Jpeg => "jpg",
         EncodedType::Png => "png",
         EncodedType::Tiff => "tiff",
+        EncodedType::Qoi => "qoi",
     };
 
 
