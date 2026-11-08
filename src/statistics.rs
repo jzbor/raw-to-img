@@ -39,7 +39,7 @@ impl StatisticsItem {
 
     pub fn time_avg(&self) -> time::Duration {
         if !self.times.is_empty() {
-            return self.times.iter().sum::<time::Duration>() / (self.times.len() as u32);
+            self.times.iter().sum::<time::Duration>() / (self.times.len() as u32)
         } else {
             time::Duration::default()
         }

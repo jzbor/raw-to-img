@@ -153,19 +153,16 @@ fn fmt_bytes(bytes: u64) -> String {
     if bytes < 1024 {
         format!("{} B", bytes)
     } else if bytes < 1024 * 1024 {
-        return format!("{:.2} KiB", (bytes as f64) / 1024.0);
+        format!("{:.2} KiB", (bytes as f64) / 1024.0)
     } else {
-        return format!("{:.2} MiB", (bytes as f64) / (1024.0 * 1024.0));
+        format!("{:.2} MiB", (bytes as f64) / (1024.0 * 1024.0))
     }
 
 }
 
 fn decode_raw(path: &path::Path) -> Result<(imagepipe::SRGBImage, time::Duration), String> {
     let start_decode = Instant::now();
-    let decoded = match imagepipe::simple_decode_8bit(path, 0, 0) {
-        Ok(img) => img,
-        Err(e) => return Err(e),
-    };
+    let decoded = imagepipe::simple_decode_8bit(path, 0, 0)?;
 
     Ok((decoded, start_decode.elapsed()))
 }
@@ -262,7 +259,7 @@ fn unused_path(orig_path: &path::Path) -> Result<path::PathBuf, String> {
 }
 
 fn file_kind(path: &path::Path) -> FileKind {
-    return match path.extension() {
+    match path.extension() {
         Some(extension) => match extension.to_str() {
             Some(ext) => {
                 if RAW_EXTENSIONS.iter().any(|e| e.to_lowercase() == ext.to_lowercase()) {
@@ -276,7 +273,7 @@ fn file_kind(path: &path::Path) -> FileKind {
             None => FileKind::Other,
         },
         None => FileKind::Other,
-    };
+    }
 }
 
 fn recode(input_path: &path::Path, output_path: &path::Path, encoder: EncoderType) -> Option<(time::Duration, time::Duration)> {

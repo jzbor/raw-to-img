@@ -25,7 +25,7 @@ impl Job {
     }
 
     pub fn name(&self) -> String {
-        return self.input_file.to_string_lossy().to_string();
+        self.input_file.to_string_lossy().to_string()
     }
 
     pub fn run(mut self) -> Result<Statistics, String> {
